@@ -1,6 +1,6 @@
 Requires the Love game engine (https://love2d.org/)
 
-This is a work in progress (WOP). Games were built under the direction of Kyle Schaub (https://www.udemy.com/course/lua-love/learn/lecture/7613791?start=420#content)
+This is a work in progress (WOP). Games were built under the direction of Kyle Schaub (https://www.udemy.com/course/lua-love)
 
 What was changed:
 - The game designs were moved into a more object oriented programming (OOP) concept.
