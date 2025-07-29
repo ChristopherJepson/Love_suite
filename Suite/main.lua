@@ -1,57 +1,52 @@
-require('MainMenu/mainmenu')
-require('Platformer/platformer')
-require('TopDownShooter/topdownshooter')
+-- main.lua
+local State             = require "State"          -- your named constants
+local StateMgr          = require "StateManager"
+local MainMenu          = require "MainMenu/mainmenu"
+local ShootingGallery   = require "ShootingGallery/shootinggallery"
+local Platformer        = require "Platformer/platformer"
+local TopdownShooter    = require "TopDownShooter/topdownshooter"
 
-game = 0
+local stateManager = StateMgr.new()
 
 function love.load()
-    if game == 0 then
-        instantiateMainMenu()
-        MainMenu:load()        
-    elseif game == -2 then
-        MainMenu:garbageCollect()
-        TopDownShooter:load()
-        game = game * -1
-    elseif game == -3 then
-        MainMenu:garbageCollect()
-        instantiatePlatformer()
-        Platformer:load()
-        game = game * -1
-    end
+    -- register each game state with a factory function
+    stateManager:register(State.MENU,   function() 
+        local inst = MainMenu.new() 
+        inst.manager = stateManager 
+        return inst 
+    end)
+    stateManager:register(State.SHOOTING_GALLERY, function() 
+        local inst = ShootingGallery.new()
+        inst.manager = stateManager
+        return inst
+    end)
+    stateManager:register(State.PLATFORMER, function() 
+        local inst = Platformer.new()
+        inst.manager = stateManager
+        return inst
+    end)
+    stateManager:register(State.TOPDOWN_SHOOTER,    function() 
+        local inst = TopdownShooter.new() 
+        inst.manager = stateManager 
+        return inst 
+    end)
+
+    -- start in the main menu
+    stateManager:switch(State.MENU)
 end
 
 function love.update(dt)
-    if game == 0 then
-        MainMenu:update(dt)
-    elseif game == 2 then
-        TopDownShooter:update(dt)       
-    elseif game == 3 then
-        Platformer:update(dt)
-    end
+    stateManager:update(dt)
 end
 
 function love.draw()
-    if game == 0 then
-        MainMenu:draw()
-    elseif game == 2 then
-        TopDownShooter:draw()
-    elseif game == 3 then
-        Platformer:draw()
-    end
+    stateManager:draw()
 end
 
 function love.keypressed(key)
-    if game == 0 then
-        MainMenu:keypressed(key)
-    elseif game == 2 then
-        TopDownShooter:keypressed(key)
-    elseif game == 3 then
-        Platformer:keypressed(key)
-    end
+    stateManager:keypressed(key)
 end
 
 function love.mousepressed(x, y, button)
-    if game == 2 then
-        TopDownShooter:mousepressed(x, y, button)
-    end
+    stateManager:mousepressed(x, y, button)
 end

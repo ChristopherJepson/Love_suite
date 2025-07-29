@@ -1,96 +1,68 @@
-function instantiatePlayers()
-    Players = {
-        player = {
-            speed = {},
-            animation = {},
-            isMoving = {},
-            direction = {},
-            grounded = {}
-        }
-    }
-    Players.__index = Players
+-- Platformer/player.lua
+local Player = {}
+Player.__index = Player
 
-    local startX = 320
-    local startY = 100
-
-    function Players:init()
-        Players.player = Worlds.firstWorld:newRectangleCollider(Players:getStartX(), Players:getStartY(), 40, 100, {collision_class = 'Player'})
-        Players.player:setFixedRotation(true)
-        Players.player.speed = 240
-        Players.player.animation = Animations.animation.idle
-        Players.player.isMoving = false
-        Players.player.direction = 1
-        Players.player.grounded = true
-    end
-    
-    function Players:clear()
-        Players.player:destroy()
-        Players.player.speed = {}
-        Players.player.animation = {}
-        Players.player.isMoving = {}
-        Players.player.direction = {}
-        Players.player.grounded = {}
-    end
-    
-    function Players:garbageCollect()
-        Players:clear()
-        Players.player.speed = nil
-        Players.player.animation = nil
-        Players.player.isMoving = nil
-        Players.player.direction = nil
-        Players.player.grounded = nil
-        Players.Player = nil
-        Players = nil
-    end
-    
-    function Players:playerUpdate(dt)
-        if Players.player.body then
-            local colliders = Worlds.firstWorld:queryRectangleArea(Players.player:getX() - 40, Players.player:getY() + 50, 40, 2, {'Platform'})
-            if #colliders > 0 then
-                Players.player.grounded = true
-            else
-                Players.player.grounded = false
-            end
-    
-            Players.player.isMoving = false
-            local px, py = Players.player:getPosition()
-            if love.keyboard.isDown('right') then
-                Players.player:setX(px + Players.player.speed*dt)
-                Players.player.isMoving = true
-                Players.player.direction = 1
-            end
-            if love.keyboard.isDown('left') then
-                Players.player:setX(px - Players.player.speed*dt)
-                Players.player.isMoving = true
-                Players.player.direction = -1
-            end
-            if Players.player:enter('Danger') then
-                Players.player:setPosition(Players:getStartX(), Players:getStartY())
-            end
-        end
-        if Players.player.grounded then
-            if Players.player.isMoving then
-                Players.player.animation = Animations.animation.run
-            else
-                Players.player.animation = Animations.animation.idle
-            end
-            Players.player.animation:update(dt)
-        else
-            Players.player.animation = Animations.animation.jump
-        end
-    end
-    
-    function Players:drawPlayer()
-        local px, py = Players.player:getPosition()
-        Players.player.animation:draw(sprites.playerSheet, px, py, nil, sprite.playerSheet.ratio * Players.player.direction, sprite.playerSheet.ratio, sprite.playerSheet.x, sprite.playerSheet.y)
-    end
-    
-    function Players:getStartX()
-        return startX
-    end
-    
-    function Players:getStartY()
-        return startY
-    end
-
+function Player.new(world, animations, sprites)
+    local self = setmetatable({}, Player)
+    self.world      = world
+    self.animations = animations
+    self.sprites    = sprites
+    self.startX, self.startY = 0, 0
+    self.collider   = world:newRectangleCollider(0,0,40,100,{collision_class='Player'})
+    self.collider:setFixedRotation(true)
+    self.speed      = 240
+    self.state      = { grounded=false, direction=1 }
+    self.animation  = animations.idle
+    return self
 end
+
+function Player:setPosition(x,y)
+    self.startX, self.startY = x, y
+    self.collider:setPosition(x,y)
+end
+
+function Player:getPosition()
+    return self.collider:getPosition()
+end
+
+function Player:update(dt)
+    local x,y = self.collider:getPosition()
+    local cols = self.world:queryRectangleArea(x-20,y+50,40,2,{'Platform'})
+    self.state.grounded = (#cols>0)
+    local moving = false
+    if love.keyboard.isDown('right') then
+        self.collider:setX(x + self.speed*dt)
+        moving = true; self.state.direction = 1
+    elseif love.keyboard.isDown('left') then
+        self.collider:setX(x - self.speed*dt)
+        moving = true; self.state.direction = -1
+    end
+    if self.collider:enter('Danger') then
+        self.collider:setPosition(self.startX,self.startY)
+    end
+    if self.state.grounded then
+        self.animation = moving and self.animations.run or self.animations.idle
+    else
+        self.animation = self.animations.jump
+    end
+    self.animation:update(dt)
+end
+
+function Player:draw()
+    local x,y = self.collider:getPosition()
+    self.animation:draw(self.sprites.playerSheet, x, y, nil, 0.25*self.state.direction, 0.25, 130, 300)
+end
+
+function Player:jump(sounds)
+    if self.state.grounded then
+        self.collider:applyLinearImpulse(0,-4000)
+        sounds.jump:play()
+    end
+end
+
+function Player:cleanup()
+    self.collider:destroy()
+    for k in pairs(self) do self[k]=nil end
+end
+
+return Player

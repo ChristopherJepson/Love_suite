@@ -1,4 +1,5 @@
-sprite = {
+-- TopDownShooter/config/sprite.lua
+local sprite = {
     ["player"] = {
        [1] = 'TopDownShooter/sprites/player.png';
     };
@@ -11,4 +12,6 @@ sprite = {
     ["bullet"] = {
         [1] = 'TopDownShooter/sprites/bullet.png';
      };
- };
+ }
+
+return sprite

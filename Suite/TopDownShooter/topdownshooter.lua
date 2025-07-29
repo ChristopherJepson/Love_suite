@@ -1,214 +1,225 @@
-TopDownShooter = {}
+-- TopDownShooter/topdownshooter.lua
+local TopDownShooter = {}
 TopDownShooter.__index = TopDownShooter
 
-function TopDownShooter:load()
-    math.randomseed(os.time())
-    love.window.setMode(895, 895)
-
-    require('TopDownShooter/config/sprite')
-    loadSprites()
-
-    player = {}
-    player.x = love.graphics.getWidth() / 2
-    player.y = love.graphics.getHeight() / 2
-    player.speed = 180
-    player.injured = false
-    player.injuredSpeed = 270
-
-    myFont = love.graphics.newFont(30)
-
-    zombies = {}
-    bullets = {}
-
-    gameState = 1
-    score = 0
-    maxTime = 2
-    timer = maxTime
+-- private helper for distance
+local function distanceBetween(x1, y1, x2, y2)
+    return math.sqrt((x2 - x1)^2 + (y2 - y1)^2)
 end
 
+-- Constructor
+defaultModuleWidth = 895
+function TopDownShooter.new()
+    local self = setmetatable({}, TopDownShooter)
+    -- player state
+    self.player = {
+        x = love.graphics.getWidth()  / 2,
+        y = love.graphics.getHeight() / 2,
+        speed        = 180,
+        injured      = false,
+        injuredSpeed = 270,
+    }
+    -- game entities
+    self.zombies   = {}
+    self.bullets   = {}
+    -- game state vars
+    self.gameState = 1 -- 1=waiting, 2=running
+    self.score     = 0
+    self.maxTime   = 2
+    self.timer     = self.maxTime
+    return self
+end
+
+-- Load assets & setup
+function TopDownShooter:load()
+    math.randomseed(os.time())
+    love.window.setMode(defaultModuleWidth, defaultModuleWidth)
+
+    -- sprite config
+    local spriteConfig = require("TopDownShooter.config.sprite")
+    self.sprites = {
+        player     = love.graphics.newImage(spriteConfig.player[1]),
+        zombie     = love.graphics.newImage(spriteConfig.zombie[1]),
+        background = love.graphics.newImage(spriteConfig.background[1]),
+        bullet     = love.graphics.newImage(spriteConfig.bullet[1]),
+    }
+    self.font = love.graphics.newFont(30)
+end
+
+function TopDownShooter:playerMouseAngle()
+    return math.atan2(
+        self.player.y - love.mouse.getY(),
+        self.player.x - love.mouse.getX()
+    ) + math.pi
+end
+
+function TopDownShooter:zombiePlayerAngle(z)
+    return math.atan2(
+        self.player.y - z.y,
+        self.player.x - z.x
+    )
+end
+
+function TopDownShooter:spawnZombie()
+    local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+    local z = { x = 0, y = 0, speed = 140, dead = false }
+    local side = math.random(1, 4)
+    if side == 1 then
+        z.x, z.y = -30,             math.random(0, h)
+    elseif side == 2 then
+        z.x, z.y = w + 30,          math.random(0, h)
+    elseif side == 3 then
+        z.x, z.y = math.random(0, w), -30
+    else
+        z.x, z.y = math.random(0, w), h + 30
+    end
+    table.insert(self.zombies, z)
+end
+
+function TopDownShooter:spawnBullet()
+    table.insert(self.bullets, {
+        x         = self.player.x,
+        y         = self.player.y,
+        speed     = 500,
+        dead      = false,
+        direction = self:playerMouseAngle(),
+    })
+end
+
+-- Update loop
 function TopDownShooter:update(dt)
+    local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+    local moveSpeed = self.player.injured and self.player.injuredSpeed or self.player.speed
 
-    local moveSpeed = player.speed
-    if player.injured then
-        moveSpeed = player.injuredSpeed
-    end
-
-    if gameState == 2 then
-        if love.keyboard.isDown("d") and player.x < love.graphics.getWidth() then
-            player.x = player.x + moveSpeed*dt
+    if self.gameState == 2 then
+        if love.keyboard.isDown("d") and self.player.x < w then
+            self.player.x = self.player.x + moveSpeed * dt
         end
-        if love.keyboard.isDown("a") and player.x > 0 then
-            player.x = player.x - moveSpeed*dt
+        if love.keyboard.isDown("a") and self.player.x > 0 then
+            self.player.x = self.player.x - moveSpeed * dt
         end
-        if love.keyboard.isDown("w") and player.y > 0 then
-            player.y = player.y - moveSpeed*dt
+        if love.keyboard.isDown("w") and self.player.y > 0 then
+            self.player.y = self.player.y - moveSpeed * dt
         end
-        if love.keyboard.isDown("s") and player.y < love.graphics.getHeight() then
-            player.y = player.y + moveSpeed*dt
+        if love.keyboard.isDown("s") and self.player.y < h then
+            self.player.y = self.player.y + moveSpeed * dt
         end
     end
 
-    for i,z in ipairs(zombies) do
-        z.x = z.x + (math.cos( zombiePlayerAngle(z) ) * z.speed * dt)
-        z.y = z.y + (math.sin( zombiePlayerAngle(z) ) * z.speed * dt)
-
-        if distanceBetween(z.x, z.y, player.x, player.y) < 30 then
-            if player.injured == false then
-                player.injured = true
+    -- zombies movement and collisions
+    for _, z in ipairs(self.zombies) do
+        local ang = self:zombiePlayerAngle(z)
+        z.x = z.x + math.cos(ang) * z.speed * dt
+        z.y = z.y + math.sin(ang) * z.speed * dt
+        if distanceBetween(z.x, z.y, self.player.x, self.player.y) < 30 then
+            if not self.player.injured then
+                self.player.injured = true
                 z.dead = true
             else
-                
-                for i,z in ipairs(zombies) do
-                    zombies[i] = nil
-                    gameState = 1
-                    player.injured = false
-                    player.x = love.graphics.getWidth()/2
-                    player.y = love.graphics.getHeight()/2
-                end
+                -- reset on second hit
+                self.zombies = {}
+                self.player.x, self.player.y = w/2, h/2
+                self.player.injured = false
+                self.gameState = 1
             end
         end
     end
 
-    for i,b in ipairs(bullets) do
-        b.x = b.x + (math.cos( b.direction ) * b.speed * dt)
-        b.y = b.y + (math.sin( b.direction ) * b.speed * dt)
+    -- bullets movement
+    for _, b in ipairs(self.bullets) do
+        b.x = b.x + math.cos(b.direction) * b.speed * dt
+        b.y = b.y + math.sin(b.direction) * b.speed * dt
     end
 
-    for i=#bullets, 1, -1 do
-        local b = bullets[i]
-        if b.x < 0 or b.y < 0 or b.x > love.graphics.getWidth() or b.y > love.graphics.getHeight() then
-            table.remove(bullets, i)
+    -- remove off-screen bullets
+    for i = #self.bullets, 1, -1 do
+        local b = self.bullets[i]
+        if b.x < 0 or b.y < 0 or b.x > w or b.y > h then
+            table.remove(self.bullets, i)
         end
     end
 
-    for i,z in ipairs(zombies) do
-        for j,b in ipairs(bullets) do
+    -- bullet-zombie collisions and cleanup
+    for _, z in ipairs(self.zombies) do
+        for _, b in ipairs(self.bullets) do
             if distanceBetween(z.x, z.y, b.x, b.y) < 20 then
                 z.dead = true
                 b.dead = true
-                score = score + 1
+                self.score = self.score + 1
             end
         end
     end
+    for i = #self.zombies, 1, -1 do if self.zombies[i].dead then table.remove(self.zombies, i) end end
+    for i = #self.bullets, 1, -1 do if self.bullets[i].dead then table.remove(self.bullets, i) end end
 
-    for i=#zombies,1,-1 do
-        local z = zombies[i]
-        if z.dead == true then
-            table.remove(zombies, i)
-        end
-    end
-
-    for i=#bullets,1,-1 do
-        local b = bullets[i]
-        if b.dead == true then
-            table.remove(bullets, i)
-        end
-    end
-
-    if gameState == 2 then
-        timer = timer - dt
-        if timer <= 0 then
-            spawnZombie()
-            maxTime = 0.95 * maxTime
-            timer = maxTime
+    -- spawn new zombies
+    if self.gameState == 2 then
+        self.timer = self.timer - dt
+        if self.timer <= 0 then
+            self:spawnZombie()
+            self.maxTime = self.maxTime * 0.95
+            self.timer   = self.maxTime
         end
     end
 end
 
+-- Draw loop
 function TopDownShooter:draw()
-    love.graphics.draw(sprites.background, 0, 0)
-
-    if gameState == 1 then
-        love.graphics.setFont(myFont)
-        love.graphics.printf("Click anywhere to begin!", 0, 50, love.graphics.getWidth(), "center")
+    local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+    love.graphics.draw(self.sprites.background, 0, 0)
+    if self.gameState == 1 then
+        love.graphics.setFont(self.font)
+        love.graphics.printf("Click anywhere to begin!", 0, 50, w, "center")
     end
-    love.graphics.printf("Score: " .. score, 0, love.graphics.getHeight()-100, love.graphics.getWidth(), "center")
-
-    if player.injured then
-        love.graphics.setColor(1,0,0)
-    end
-
-    love.graphics.draw(sprites.player, player.x, player.y, playerMouseAngle(), nil, nil, sprites.player:getWidth()/2, sprites.player:getHeight()/2)
-
+    love.graphics.printf("Score: "..self.score, 0, h - 100, w, "center")
+    if self.player.injured then love.graphics.setColor(1, 0, 0) end
+    love.graphics.draw(
+        self.sprites.player,
+        self.player.x, self.player.y,
+        self:playerMouseAngle(), nil, nil,
+        self.sprites.player:getWidth()/2,
+        self.sprites.player:getHeight()/2
+    )
     love.graphics.setColor(1,1,1)
-
-    for i,z in ipairs(zombies) do
-        love.graphics.draw(sprites.zombie, z.x, z.y, zombiePlayerAngle(z), nil, nil, sprites.zombie:getWidth()/2, sprites.zombie:getHeight()/2)
+    for _, z in ipairs(self.zombies) do
+        love.graphics.draw(
+            self.sprites.zombie, z.x, z.y,
+            self:zombiePlayerAngle(z), nil, nil,
+            self.sprites.zombie:getWidth()/2,
+            self.sprites.zombie:getHeight()/2
+        )
     end
-
-    for i,b in ipairs(bullets) do
-        love.graphics.draw(sprites.bullet, b.x, b.y, nil, 0.5, nil, sprites.bullet:getWidth()/2, sprites.bullet:getHeight()/2)
-    end
-end
-
-function TopDownShooter:keypressed( key )
-    if key == "space" then
-        spawnZombie()
-    end
-end
-
-function TopDownShooter:mousepressed( x, y, button )
-    if button == 1 and gameState == 2 then
-        spawnBullet()
-    elseif button == 1 and gameState == 1 then
-        gameState = 2
-        maxTime = 2
-        timer = maxTime
-        score = 0
+    for _, b in ipairs(self.bullets) do
+        love.graphics.draw(
+            self.sprites.bullet,
+            b.x, b.y, nil, 0.5, nil,
+            self.sprites.bullet:getWidth()/2,
+            self.sprites.bullet:getHeight()/2
+        )
     end
 end
 
-function playerMouseAngle()
-    return math.atan2( player.y - love.mouse.getY(), player.x - love.mouse.getX() ) + math.pi
+-- Input handlers
+function TopDownShooter:keypressed(key)
+    if key == "space" then self:spawnZombie() end
 end
 
-function zombiePlayerAngle(enemy)
-    return math.atan2( player.y - enemy.y, player.x - enemy.x )
-end
-
-function spawnZombie()
-    local zombie = {}
-    zombie.x = 0
-    zombie.y = 0
-    zombie.speed = 140
-    zombie.dead = false
-
-    local side = math.random(1, 4)
-    if side == 1 then
-        zombie.x = -30
-        zombie.y = math.random(0, love.graphics.getHeight())
-    elseif side == 2 then
-        zombie.x = love.graphics.getWidth() + 30
-        zombie.y = math.random(0, love.graphics.getHeight())
-    elseif side == 3 then
-        zombie.x = math.random(0, love.graphics.getWidth())
-        zombie.y = -30
-    elseif side == 4 then
-        zombie.x = math.random(0, love.graphics.getWidth())
-        zombie.y = love.graphics.getHeight() + 30
+function TopDownShooter:mousepressed(x, y, button)
+    if button == 1 then
+        if self.gameState == 2 then
+            self:spawnBullet()
+        else
+            self.gameState = 2
+            self.maxTime   = 2
+            self.timer     = self.maxTime
+            self.score     = 0
+        end
     end
-
-    table.insert(zombies, zombie)
 end
 
-function spawnBullet()
-    local bullet = {}
-    bullet.x = player.x
-    bullet.y = player.y
-    bullet.speed = 500
-    bullet.dead = false
-    bullet.direction = playerMouseAngle()
-    table.insert(bullets, bullet)
+-- Cleanup for GC
+function TopDownShooter:cleanup()
+    for k in pairs(self) do self[k] = nil end
 end
 
-function distanceBetween(x1, y1, x2, y2)
-    return math.sqrt( (x2 - x1)^2 + (y2 - y1)^2 )
-end
-
-function loadSprites()
-    sprites = {}
-    sprites.player = love.graphics.newImage(sprite.player[1])
-    sprites.zombie = love.graphics.newImage(sprite.zombie[1])
-    sprites.background = love.graphics.newImage(sprite.background[1])
-    sprites.bullet = love.graphics.newImage(sprite.bullet[1])
-end
+return TopDownShooter
