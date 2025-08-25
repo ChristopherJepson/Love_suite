@@ -3,6 +3,7 @@ Requires the Love game engine (https://love2d.org/)
 This is a work in progress (WOP). Games were built under the direction of Kyle Schaub (https://www.udemy.com/course/lua-love)
 
 What was changed:
+- Unit Testing using Luna Test is now supported.
 - The game designs were refactored to work with State Management.
 - The games were combined using a Main Menu module.
 - A third game using Kyle Schaub's design was added.
